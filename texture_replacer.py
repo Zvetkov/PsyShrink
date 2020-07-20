@@ -1,13 +1,15 @@
 import logging
 import sys
 import os
-# from pathlib import Path
-# from copy import deepcopy
+from utils.game_path import WORKING_DIRECTORY
 
-DESKTOP_PATH = r"C:\Users\Seel\Desktop"
-ARCHIVE_PATH = r"C:\Users\Seel\Desktop\Psychonautsdata2.pkg_orig"
-ARCHIVE_PATH_REPACKAGE = r"C:\Users\Seel\Desktop\Psychonautsdata2.pkg_re"
-replacement_folder = r"C:\Users\Seel\Desktop\PsychoRemaster\ReplaceWith"
+
+DESKTOP_PATH = os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop')
+ARCHIVE_PATH_REPACKAGE = os.path.join(DESKTOP_PATH, "Psychonautsdata2.pkg_re")
+
+ARCHIVE_PATH_PKG = "Psychonautsdata2.pkg_orig"
+ARCHIVE_PATH_PPF = "WorkResource/PCLevelPackFiles/ASCO.ppf"
+
 NULL = b"\x00"
 
 
@@ -15,7 +17,8 @@ def main():
     logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s][%(levelname)s]: %(message)s',
                         datefmt='%m/%d/%Y %I:%M:%S %p')
-    replace_texture(ARCHIVE_PATH, replacement_folder)
+    # replace_texture(os.path.join(WORKING_DIRECTORY, ARCHIVE_PATH_PKG))
+    replace_texture(os.path.join(WORKING_DIRECTORY, ARCHIVE_PATH_PPF))
 
 
 class PKGArchive(object):
@@ -145,6 +148,20 @@ class PKGArchive(object):
             if file_entry.padding_size != 0:
                 current_offset += file_entry.padding_size
 
+    def unpack(self, target_path):
+        create_dir_structure(os.path.join(target_path, "unpack"), self.dir_name_dict.keys())
+        self.save_all_files(os.path.join(target_path, "unpack"))
+
+    def save_all_files(self, root_path):
+        files_dict = {}
+        for file_entry in self.file_descriptions_list:
+            files_dict[file_entry.file_index] = file_entry
+        for relative_path in self.dir_name_dict.keys():
+            full_path = os.path.join(root_path, relative_path)
+            for file_index in range(self.dir_name_dict[relative_path]["start_index"],
+                                    self.dir_name_dict[relative_path]["end_index"]):
+                save_file_to_path(full_path, files_dict[file_index])
+
     def repackage(self, save_path):
         with open(r"C:\Users\Seel\Desktop\ca_load.dds", 'rb') as f:
             dds_new = f.read()
@@ -206,41 +223,6 @@ class PKGArchive(object):
         with open(save_path, "wb") as f:
             f.write(struct_info + file_padding)
 
-        # for i in range(len(self.file_descriptions_list)):
-        #     file_entry = self.file_descriptions_list[i]
-        #     if i < len(self.file_descriptions_list) - 1:
-        #         padding_size = (self.file_descriptions_list[i + 1].file_offset
-        #                         - file_entry.file_length - file_entry.file_offset)
-        #     if padding_size != 0:
-        #         print(f"File size: {file_entry.file_length}")
-        #         print(f"Padding: {padding_size}")
-        #         print(f"Total block size: {file_entry.file_length + padding_size}")
-        #         self.block_sizes[file_entry.file_index] = [file_entry.file_length + padding_size, file_entry]
-        #         print(f"Block size div by : {file_entry.file_length + padding_size}")
-        #         diff = self.file_descriptions_list[i + 1].file_offset - file_entry.file_offset
-        #         print(f"Off {file_entry.file_offset}-{self.file_descriptions_list[i + 1].file_offset} diff: {diff}")
-        #     else:
-        #         self.block_sizes_no_pad[file_entry.file_index] = [file_entry.file_length, file_entry]
-
-        # with open(save_path, "ab") as f:
-        #     for i in range(len(self.file_descriptions_list)):
-        #         file_entry = self.file_descriptions_list[i]
-        #         f.write(file_entry.data)
-        #         if i < len(self.file_descriptions_list) - 1:
-        #             padding_size = (self.file_descriptions_list[i + 1].file_offset
-        #                             - file_entry.file_length - file_entry.file_offset)
-        #             f.write(b"\x00" * padding_size)
-        #         if padding_size != 0:
-        #             print(f"File size: {file_entry.file_length}")
-        #             print(f"Padding: {padding_size}")
-        #             print(f"Total block size: {file_entry.file_length + padding_size}")
-        #             self.block_sizes[file_entry.file_index] = [file_entry.file_length + padding_size, file_entry]
-        #             print(f"Block size div by : {file_entry.file_length + padding_size}")
-        #             diff = self.file_descriptions_list[i + 1].file_offset - file_entry.file_offset
-        #             print(f"Off {file_entry.file_offset}-{self.file_descriptions_list[i + 1].file_offset} diff: {diff}")
-        #         else:
-        #             self.block_sizes_no_pad[file_entry.file_index] = [file_entry.file_length, file_entry]
-
         self.file_descriptions_list.sort(key=lambda x: x.file_offset, reverse=False)
         with open(save_path, "ab") as f:
             for file_entry in self.file_descriptions_list:
@@ -248,8 +230,17 @@ class PKGArchive(object):
                 if file_entry.padding_size != 0:
                     f.write(b"\x00" * file_entry.padding_size)
 
-        a = 1
 
+class PPFArchive(object):
+    def __init__(self, archive_raw):
+        self.raw = archive_raw
+        self.header = archive_raw[0:4]
+
+    def unpack(self, target_path):
+        pass
+
+    def repackage(self, save_path):
+        pass
 
 
 class ArchiveFile(object):
@@ -282,11 +273,9 @@ class ArchiveDirRecord(object):
         self.of_directory = None
 
 
-def replace_texture(path_to_archive: str, replacement_folder: str):
+def replace_texture(path_to_archive: str):
     pkg = read_archive(path_to_archive)
-    # create_dir_structure(os.path.join(DESKTOP_PATH, "unpack"), pkg.dir_name_dict)
-
-    # save_all_files(os.path.join(DESKTOP_PATH, "unpack"), pkg.file_descriptions_list, pkg.dir_name_dict)
+    # pkg.unpack(DESKTOP_PATH)
     pkg.repackage(ARCHIVE_PATH_REPACKAGE)
     # pkg_2 = read_archive(ARCHIVE_PATH_REPACKAGE)
     a = 1
@@ -296,7 +285,10 @@ def read_archive(path_to_archive: str):
     logging.debug(f"Opening archive: '{path_to_archive}'")
     with open(path_to_archive, 'rb') as f:
         archive_file = f.read()
-        pkg = PKGArchive(archive_file)
+        if archive_file[:4] == b"ZPKG":
+            pkg = PKGArchive(archive_file)
+        elif archive_file[:4] == b"PPAK":
+            pkg = PPFArchive(archive_file)
     return pkg
 
 
@@ -314,19 +306,8 @@ def save_file_to_path(save_path, archive_file: ArchiveFile):
         f.write(archive_file.data)
 
 
-def save_all_files(root_path, files_list, dir_name_dict):
-    files_dict = {}
-    for file_entry in files_list:
-        files_dict[file_entry.file_index] = file_entry
-    for relative_path in dir_name_dict.keys():
-        full_path = os.path.join(root_path, relative_path)
-        for file_index in range(dir_name_dict[relative_path]["start_index"], dir_name_dict[relative_path]["end_index"]):
-            # if files_dict[file_index].extension == "dds":
-            save_file_to_path(full_path, files_dict[file_index])
-
-
-def create_dir_structure(root_path, dir_name_dict):
-    for relative_path in dir_name_dict.keys():
+def create_dir_structure(root_path, path_list):
+    for relative_path in path_list:
         full_path = os.path.join(root_path, relative_path)
         if not os.path.exists(full_path):
             os.makedirs(full_path)
